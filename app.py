@@ -311,7 +311,7 @@ features = ["temperature_2m", "relative_humidity_2m", "pressure_msl",
 # ==========================================
 # MODEL PREDICTION (using last 24h up to "now")
 # ==========================================
-now = pd.Timestamp.now().floor("H")
+now = pd.Timestamp.now().floor("h")
 past_df = df[df["time"] <= now]
 sequence = past_df[features].tail(24)
 
