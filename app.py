@@ -537,7 +537,7 @@ st.plotly_chart(fig_weather, use_container_width=True)
 # ==========================================
 st.markdown('<div class="section-title">📅 Weather Timeline</div>', unsafe_allow_html=True)
 
-now_hour = pd.Timestamp.now().floor("H")
+now_hour = pd.Timestamp.now().floor("h")
 
 for _, row in future.iterrows():
     is_now = row["DateTime"] == now_hour
