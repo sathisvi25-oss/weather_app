@@ -3,10 +3,20 @@ import pandas as pd
 import numpy as np
 import requests
 import joblib
+import pytz
 import plotly.express as px
 import plotly.graph_objects as go
 from tensorflow.keras.models import load_model
 from datetime import datetime, timedelta
+
+# ==========================================
+# TIMEZONE HELPER (IST = UTC+5:30)
+# ==========================================
+IST = pytz.timezone("Asia/Kolkata")
+
+def now_ist():
+    """Returns current IST time as timezone-naive Timestamp, floored to hour."""
+    return pd.Timestamp.now(tz=IST).replace(tzinfo=None).floor("h")
 
 # ==========================================
 # PAGE CONFIG & STYLES
@@ -248,19 +258,23 @@ with st.sidebar:
     st.caption(f"📍 **{city_name}**, {admin1}, {country}")
     st.caption(f"Lat: {latitude:.4f} | Lon: {longitude:.4f}")
 
+    # Show current IST time in sidebar
+    current_ist = now_ist()
+    st.caption(f"🕐 IST Now: **{current_ist.strftime('%d %b %Y, %I:%M %p')}**")
+
     st.markdown("---")
     auto_window = st.checkbox("Auto-start forecast from current hour", value=True)
 
     if auto_window:
-        forecast_start_hour = pd.Timestamp.now().hour
-        st.caption(f"Window: **Now ({forecast_start_hour:02d}:00) → next 24 hours**")
+        forecast_start_hour = now_ist().hour
+        st.caption(f"Window: **Now ({forecast_start_hour:02d}:00 IST) → next 24 hours**")
     else:
         forecast_start_hour = st.slider(
             "Forecast window start hour (24h clock)",
             min_value=0, max_value=23, value=10,
-            help="Forecast covers 24 hours starting from this hour today"
+            help="Forecast covers 24 hours starting from this hour today (IST)"
         )
-        st.caption(f"Window: **{forecast_start_hour:02d}:00 today → {forecast_start_hour:02d}:00 tomorrow**")
+        st.caption(f"Window: **{forecast_start_hour:02d}:00 IST today → {forecast_start_hour:02d}:00 IST tomorrow**")
 
     st.markdown("---")
     refresh = st.button("🔄 Refresh Data", use_container_width=True)
@@ -286,6 +300,7 @@ def fetch_weather(lat, lon):
         f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
         "&hourly=temperature_2m,relative_humidity_2m,pressure_msl,cloud_cover,wind_speed_10m,precipitation"
         "&past_days=2&forecast_days=3"
+        "&timezone=Asia%2FKolkata"  # <-- Request data in IST directly from API
     )
     return requests.get(url).json()
 
@@ -309,9 +324,9 @@ features = ["temperature_2m", "relative_humidity_2m", "pressure_msl",
              "cloud_cover", "wind_speed_10m", "precipitation"]
 
 # ==========================================
-# MODEL PREDICTION (using last 24h up to "now")
+# MODEL PREDICTION (using last 24h up to "now" in IST)
 # ==========================================
-now = pd.Timestamp.now().floor("h")
+now = now_ist()  # IST current time
 past_df = df[df["time"] <= now]
 sequence = past_df[features].tail(24)
 
@@ -335,7 +350,7 @@ st.markdown(f"""
 <h1>🌦️ AI Weather Forecast Dashboard</h1>
 <div class="location-pill">📍 {location_str} &nbsp;•&nbsp; {latitude:.2f}, {longitude:.2f}</div>
 <h2>{weather}</h2>
-<p>AI Confidence: <b>{confidence:.2f}%</b></p>
+<p>AI Confidence: <b>{confidence:.2f}%</b> &nbsp;|&nbsp; 🕐 IST: <b>{now.strftime('%d %b %Y, %I:%M %p')}</b></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -380,14 +395,13 @@ if pred is not None:
         st.plotly_chart(pie, use_container_width=True)
 
 # ==========================================
-# BUILD 24-HOUR WINDOW
+# BUILD 24-HOUR WINDOW (IST-based)
 # ==========================================
 if auto_window:
-    # Start exactly from the current hour
-    window_start = now
+    window_start = now  # already IST, floored to hour
 else:
-    today = pd.Timestamp.now().normalize()
-    window_start = today + pd.Timedelta(hours=forecast_start_hour)
+    today_ist = now.normalize()
+    window_start = today_ist + pd.Timedelta(hours=forecast_start_hour)
 
 window_end = window_start + pd.Timedelta(hours=24)
 
@@ -430,7 +444,7 @@ future["Forecast"] = future.apply(classify_weather, axis=1)
 # WINDOW HEADER
 # ==========================================
 st.markdown(
-    f'<div class="section-title">📅 Forecast Window: '
+    f'<div class="section-title">📅 Forecast Window (IST): '
     f'{window_start.strftime("%d %b %Y, %I:%M %p")} → {window_end.strftime("%d %b %Y, %I:%M %p")}</div>',
     unsafe_allow_html=True
 )
@@ -464,7 +478,7 @@ else:
 # ==========================================
 # FORECAST TABLE
 # ==========================================
-st.markdown('<div class="section-title">🕒 Hour-by-Hour Forecast</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">🕒 Hour-by-Hour Forecast (IST)</div>', unsafe_allow_html=True)
 
 st.dataframe(
     future[["Date", "Time", "Forecast", "Temperature", "Humidity", "Wind", "Rain"]]
@@ -535,9 +549,9 @@ st.plotly_chart(fig_weather, use_container_width=True)
 # ==========================================
 # TIMELINE
 # ==========================================
-st.markdown('<div class="section-title">📅 Weather Timeline</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">📅 Weather Timeline (IST)</div>', unsafe_allow_html=True)
 
-now_hour = pd.Timestamp.now().floor("h")
+now_hour = now_ist()  # Use IST for NOW badge comparison
 
 for _, row in future.iterrows():
     is_now = row["DateTime"] == now_hour
